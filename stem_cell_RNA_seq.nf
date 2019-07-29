@@ -335,7 +335,7 @@ process QoRTsR {
 
     script:
     """
-    bash ${y} ${x} 3 star > decoder
+    bash ${y} ${x} 1 star > decoder
     Rscript /home/sejjctj/Scratch/nf_tutorial/new_test/01_07_19/qorts.R decoder
     """
 }
