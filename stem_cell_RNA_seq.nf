@@ -126,12 +126,12 @@ Channel
 
 def getSampleID( file ){
     // using RegEx to extract the SampleID
-    regexpPE = /(\w+)\/(\w+_[1-6])\/\w+\/[\w\-]+(L[0-4]{3})/
+    regexpPE = /([\w_\-]+)\/(\w+_[1-6])\/\w+\/[\w\-]+(L[0-4]{3})/
     (file =~ regexpPE)[0][1]
 }
 
 def getReplicateID( file ){
-    regexpPE = /(\w+)\/(\w+_[1-6])\/\w+\/[\w\-]+(L[0-4]{3})/
+    regexpPE = /([\w_\-]+)\/(\w+_[1-6])\/\w+\/[\w\-]+(L[0-4]{3})/
     (file =~ regexpPE)[0][2]
 }
 
@@ -336,7 +336,7 @@ process QoRTsR {
     script:
     """
     bash ${y} ${x} 1 star > decoder
-    Rscript /home/sejjctj/Scratch/nf_tutorial/new_test/01_07_19/qorts.R decoder
+    Rscript /home/sejjctj/pipelines/nextflow/qorts.R decoder
     """
 }
 
