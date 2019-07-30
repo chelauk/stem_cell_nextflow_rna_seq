@@ -297,9 +297,7 @@ process markDuplicates {
 
 process qorts {
     tag "${sample_prefix}, ${replicate}"
-    validExitStatus 0,1,2
-    echo true
-
+    errorStrategy 'ignore'
     publishDir "${sample_id}/${replicate}/", mode: 'copy'
 
     input:
