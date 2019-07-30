@@ -181,7 +181,6 @@ process trim_fastq {
 
 process make_bam {
   tag "${sample_prefix}, ${replicate}"
-  echo true
   label 'big_mem'
 
   publishDir "${sample_id}/${replicate}/STAR", mode: 'copy',
@@ -239,7 +238,7 @@ process make_bam {
 
 process fusion {
 
-    echo true
+    validExitStatus 0,1,2
     tag "${sample_id}.fusion"
     label 'medium_mem'
  
@@ -298,6 +297,7 @@ process markDuplicates {
 
 process qorts {
     tag "${sample_prefix}, ${replicate}"
+    validExitStatus 0,1,2
     echo true
 
     publishDir "${sample_id}/${replicate}/", mode: 'copy'
@@ -341,7 +341,6 @@ process QoRTsR {
 }
 
 process dupradar {
-    echo true
     module 'r/recommended'
     tag "${sample_prefix}.dupRadar"
     publishDir "${sample_id}/${replicate}/dupradar", mode: 'copy',
@@ -363,6 +362,6 @@ process dupradar {
     file "*.{pdf,txt}" into dupradar_results
 
     """
-    Rscript /home/sejjctj/Scratch/nf_tutorial/new_test/01_07_19/dupRadar.R $bam $gtf 0 TRUE 4
+    Rscript /home/sejjctj/pipelines/nextflow/dupRadar.R $bam $gtf 0 TRUE 4
     """
 }
