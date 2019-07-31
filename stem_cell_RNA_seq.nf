@@ -70,6 +70,11 @@ the pipeline will create the rest (sample_ID_qorts/dupradar/fastqc/etc)
     nextflow run chela_rnaseq samples --genome GRCh38 -c sge.config
     Mandatory arguments:
       --genome                      Path to input data (must be surrounded with quotes)
+    Optional arguments:
+      --fusion                      Check RNA-seq for fusion
+      --kallisto                    Run Kallisto
+      --Hisat                       Run Hisat
+
     References                      If not specified in the configuration file or you wish to overwrite any of the references.
       --star_index                  Path to STAR index
       --hisat2_index                Path to HiSAT2 index
@@ -77,6 +82,7 @@ the pipeline will create the rest (sample_ID_qorts/dupradar/fastqc/etc)
       --gtf                         Path to GTF file
       --gff                         Path to GFF3 file
       --bed12                       Path to bed12 file
+    
     Other options:
       --email                       Set this parameter to your e-mail address to get a summary e-mail with details of the run sent to you when the workflow exits
       --seqCenter                   Add sequencing center in @RG line of output BAM header
@@ -85,6 +91,7 @@ the pipeline will create the rest (sample_ID_qorts/dupradar/fastqc/etc)
 
 params.help = false
 params.genome = false
+params.fusion = false
 params.star_index = params.genome ? params.genomes[ params.genome  ].star ?: false : false
 params.fasta = params.genome ? params.genomes[ params.genome  ].fasta ?: false : false
 params.gtf = params.genome ? params.genomes[ params.genome  ].gtf ?: false : false
@@ -238,12 +245,15 @@ process make_bam {
 
 process fusion {
 
-    validExitStatus 0,1,2
     tag "${sample_id}.fusion"
+    errorStrategy 'ignore'
     label 'medium_mem'
  
     publishDir "${sample_id}/${replicate}/fusion", pattern: '*fusion*', mode: 'copy'
- 
+    
+    when:
+    params.fusion == "yes"
+    
     input:
     set val(sample_prefix), val(sample_id), val(replicate), file(bam) from junction_ch
     file gtf from gtf
