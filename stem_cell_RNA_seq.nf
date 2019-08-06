@@ -74,6 +74,7 @@ the pipeline will create the rest (sample_ID_qorts/dupradar/fastqc/etc)
       --fusion                      Check RNA-seq for fusion
       --kallisto                    Run Kallisto
       --Hisat                       Run Hisat
+      --fromBam                     runs from bam onward
 
     References                      If not specified in the configuration file or you wish to overwrite any of the references.
       --star_index                  Path to STAR index
@@ -91,7 +92,10 @@ the pipeline will create the rest (sample_ID_qorts/dupradar/fastqc/etc)
 
 params.help = false
 params.genome = false
-params.fusion = false
+params.skipFusion = false
+params.skipFastqc = false
+params.skipTrimFastq = false
+params.skipMakeBam = false
 params.star_index = params.genome ? params.genomes[ params.genome  ].star ?: false : false
 params.fasta = params.genome ? params.genomes[ params.genome  ].fasta ?: false : false
 params.gtf = params.genome ? params.genomes[ params.genome  ].gtf ?: false : false
@@ -112,6 +116,10 @@ def summary = [:]
      if(params.fasta) summary['FASTA'] = params.fasta
      if(params.gtf) summary['GTF'] = params.gtf
      if(params.ref_dir) summary['resource directory'] = params.ref_dir
+     if(params.skipFusion) summary['skipFusion'] = params.skipFusion
+     if(params.skipFastqc) summary['skipFastqc'] = params.skipFastqc
+     if(params.skipTrimFastq) summary['skipTrimFastq'] = params.skipTrimFastq
+     if(params.skipMakeBam) summary['skipMakeBam'] = params.skipMakeBam
  }
 
  // Validate inputs
@@ -126,21 +134,46 @@ def summary = [:]
  log.info summary.collect { k,v -> "${k.padRight(15)}: $v" }.join("\n")
  log.info "========================================="
 
-Channel
-     .fromFilePairs("*/replicate_*/fastq_raw/*L00[1-4]_R{1,2}*fastq.gz",size:8 )
-     .map { prefix, file -> tuple(prefix, getSampleID(file[0]), getReplicateID(file[0]),file) }
-     .into {fastqc_ch;raw_reads_trimgalore;file_locations }
-
-def getSampleID( file ){
-    // using RegEx to extract the SampleID
-    regexpPE = /([\w_\-]+)\/(\w+_[1-6])\/\w+\/[\w\-]+(L[0-4]{3})/
-    (file =~ regexpPE)[0][1]
-}
-
-def getReplicateID( file ){
-    regexpPE = /([\w_\-]+)\/(\w+_[1-6])\/\w+\/[\w\-]+(L[0-4]{3})/
-    (file =~ regexpPE)[0][2]
-}
+ Channel
+      .fromFilePairs("*/replicate_*/fastq_raw/*L00[1-4]_R{1,2}*fastq.gz",size:8 )
+      .map { prefix, file -> tuple(prefix, getSampleID(file[0]), getReplicateID(file[0]),file) }
+      .into {fastqc_ch;raw_reads_trimgalore;file_locations }
+ 
+ // Added channel to check if bam is already created
+ 
+ Channel
+      .fromPath("*/replicate_*/bam/*bam")
+      .map { file -> tuple(getPrefix_bam(file), getSampleID_bam(file), getReplicateID_bam(file),file) }
+      .into { ready_fusion; ready_markDuplicates }
+ 
+def getPrefix_bam( file ){
+    //using RegEx to extract prefix
+     regexpPE = /([\w_\-]+)\/(\w+_[1-6])\/bam\/([\w\-]+S\d+)/
+     (file =~ regexpPE)[0][3]
+    }
+ 
+ def getSampleID_bam( file ){
+     // using RegEx to extract the SampleID
+     regexpPE = /([\w_\-]+)\/(\w+_[1-6])\/\w+\/[\w\-]+/
+     (file =~ regexpPE)[0][1]
+ }
+ 
+ def getReplicateID_bam( file ){
+     // using RegEx to extract the SampleID
+     regexpPE = /([\w_\-]+)\/(\w+_[1-6])\/\w+\/[\w\-]+/
+     (file =~ regexpPE)[0][2]
+ }
+ 
+ def getSampleID( file ){
+     // using RegEx to extract the SampleID
+     regexpPE = /([\w_\-]+)\/(\w+_[1-6])\/\w+\/[\w\-]+(L[0-4]{3})/
+     (file =~ regexpPE)[0][1]
+ }
+ 
+ def getReplicateID( file ){
+     regexpPE = /([\w_\-]+)\/(\w+_[1-6])\/\w+\/[\w\-]+(L[0-4]{3})/
+     (file =~ regexpPE)[0][2]
+ }
 
 process fastqc {
   tag "${sample_id},${replicate}"
@@ -149,6 +182,9 @@ process fastqc {
 
   publishDir "${sample_id}/${replicate}/fastqc", mode: 'copy',
      saveAs: {filename -> filename.indexOf(".zip") > 0 ? "$filename" : "$filename"}
+  
+  when:
+  !params.skipFastqc
 
   input:
   set sample_prefix, sample_id, replicate, file(reads) from fastqc_ch
@@ -172,6 +208,9 @@ process trim_fastq {
        if (filename.indexOf("trimming_report.txt") > 0) "$filename"
        else null
   }
+  
+  when:
+  !params.skipTrimFastq
 
   input:
   set val(sample_prefix), val(sample_id), val(replicate), file(reads) from raw_reads_trimgalore
@@ -199,6 +238,9 @@ process make_bam {
     else if (filename.indexOf("idxstats") > 0 ) "$filename"
     else null
     }
+  
+  when:
+  !params.skipMakeBam
 
   input:
   set val(sample_prefix), val(sample_id), val(replicate), file(reads) from trimmed_ch
@@ -252,10 +294,10 @@ process fusion {
     publishDir "${sample_id}/${replicate}/fusion", pattern: '*fusion*', mode: 'copy'
     
     when:
-    params.fusion == "yes"
+    !params.skipFusion
     
     input:
-    set val(sample_prefix), val(sample_id), val(replicate), file(bam) from junction_ch
+    set val(sample_prefix), val(sample_id), val(replicate), file(bam) from junction_ch.mix(ready_fusion)
     file gtf from gtf
     file fasta from fasta
 
@@ -285,7 +327,7 @@ process markDuplicates {
         saveAs: {filename -> filename.indexOf("_metrics.txt") > 0 ? "metrics/$filename" : "$filename"}
 
     input:
-    set val(sample_prefix), val(sample_id), val(replicate), file(bam) from mark_duplicates
+    set val(sample_prefix), val(sample_id), val(replicate), file(bam) from mark_duplicates.mix(ready_markDuplicates)
 
     output:
     set val(sample_prefix), val(sample_id), val(replicate), file("${sample_prefix}*markDups.bam") into bam_qc,bam_md
