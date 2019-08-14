@@ -371,6 +371,8 @@ process qorts {
 
 process QoRTsR {
     echo true
+    errorStrategy 'ignore'
+    
     module 'r/recommended'
 
     publishDir ".", mode: 'copy'
