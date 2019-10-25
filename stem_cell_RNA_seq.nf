@@ -134,11 +134,18 @@ def summary = [:]
  log.info summary.collect { k,v -> "${k.padRight(15)}: $v" }.join("\n")
  log.info "========================================="
 
- Channel
+if (params.fastqs == 4){
+    Channel
       .fromFilePairs("*/replicate_*/fastq_raw/*L00[1-4]_R{1,2}*fastq.gz",size:8 )
       .map { prefix, file -> tuple(prefix, getSampleID(file[0]), getReplicateID(file[0]),file) }
       .into {fastqc_ch;raw_reads_trimgalore;file_locations }
- 
+} else {
+    Channel
+      .fromFilePairs("*/replicate_*/fastq_raw/*L00[1-4]_R{1,2}*fastq.gz",size:2 )
+      .map { prefix, file -> tuple(prefix, getSampleID(file[0]), getReplicateID(file[0]),file) }
+      .into {fastqc_ch;raw_reads_trimgalore;file_locations }
+
+}
  // Added channel to check if bam is already created
  
  Channel
@@ -362,7 +369,7 @@ process qorts {
     """
     java -Xmx32G -jar ~/applications/qorts/QoRTs-STABLE.jar QC \\
     --minMAPQ 60 \\
-    --maxReadLength 100 \\
+    --maxReadLength 150 \\
     ${bam} \\
     ${gtf} \\
     ${sample_prefix}_qorts
@@ -379,7 +386,7 @@ process QoRTsR {
 
     input:
     file(w) from qorts_res.collect()
-    file(x) from Channel.fromPath('./samples')
+    file(x) from Channel.fromPath('samples')
     file(y) from Channel.fromPath('/home/sejjctj/useful/get_qorts_dataver2')
 
     output:
@@ -388,7 +395,7 @@ process QoRTsR {
     script:
     """
     bash ${y} ${x} 1 star > decoder
-    Rscript /home/sejjctj/pipelines/nextflow/qorts.R decoder
+    Rscript /home/sejjctj/pipelines/rna_seq/qorts.R decoder
     """
 }
 
@@ -414,6 +421,6 @@ process dupradar {
     file "*.{pdf,txt}" into dupradar_results
 
     """
-    Rscript /home/sejjctj/pipelines/nextflow/dupRadar.R $bam $gtf 0 TRUE 4
+    Rscript  /home/sejjctj/pipelines/rna_seq/dupRadar.R $bam $gtf 0 TRUE 4
     """
 }
