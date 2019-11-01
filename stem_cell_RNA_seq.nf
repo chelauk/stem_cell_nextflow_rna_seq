@@ -337,7 +337,7 @@ process markDuplicates {
     set val(sample_prefix), val(sample_id), val(replicate), file(bam) from mark_duplicates.mix(ready_markDuplicates)
 
     output:
-    set val(sample_prefix), val(sample_id), val(replicate), file("${sample_prefix}*markDups.bam") into bam_qc,bam_md
+    set val(sample_prefix), val(sample_id), val(replicate), file("${sample_prefix}*markDups.bam") into bam_quali,bam_qc,bam_md,bam_stringtie
     file "${sample_prefix}*markDups_metrics.txt" into picard_results
     file "${sample_prefix}*markDups.bam.bai"
 
@@ -351,6 +351,29 @@ process markDuplicates {
         PROGRAM_RECORD_ID='null' \\
         VALIDATION_STRINGENCY=LENIENT
     samtools index ${bam.baseName}.markDups.bam
+    """
+}
+
+
+process stringtie {
+    errorStrategy 'ignore'
+    tag "${sample_prefix}, ${replicate}"
+    publishDir "${sample_id}/${replicate}", mode: 'copy'
+ 
+    input:
+    set val(sample_prefix), val(sample_id), val(replicate), file(bam) from bam_stringtie
+
+    output:
+    set val(sample_prefix), val(sample_id), val(replicate), file("stringtie") into stringtie_out
+
+    """
+    mkdir stringtie
+    ~/applications/stringtie-2.0.4.Linux_x86_64/stringtie -p 4 \\
+    -G  ${gtf}  \\
+    -A  ./stringtie/${sample_id}.gene_abund.tab \\
+    -o  ./stringtie/${sample_id}.gtf \\
+    -B -e \\
+    -v ${bam}
     """
 }
 
@@ -370,18 +393,44 @@ process qorts {
     java -Xmx32G -jar ~/applications/qorts/QoRTs-STABLE.jar QC \\
     --minMAPQ 60 \\
     --maxReadLength 150 \\
+    --prefilterImproperPairs \\
     ${bam} \\
     ${gtf} \\
     ${sample_prefix}_qorts
     """
 }
 
+ process qualimap {
+     tag "${sample_prefix}, ${replicate}"
+     errorStrategy 'ignore'
+     publishDir "${sample_id}/${replicate}/", mode: 'copy'
+ 
+     input:
+     set val(sample_prefix), val(sample_id), val(replicate), file(bam) from bam_quali
+ 
+     output:
+     file("qualimap") into qualimap_res
+ 
+     script:
+     """
+     mkdir java_temp
+     export JAVA_OPTS="-Djava.io.tmpdir=./java_temp"
+     mkdir qualimap
+     ~/applications/qualimap_v2.2.1/qualimap rnaseq  \\
+     --java-mem-size=16G \\
+     -bam ${bam} \\
+     -gtf ${gtf} \\
+     -pe \\
+     -outdir ./qualimap
+     """
+ }
+
 process QoRTsR {
+    scratch 'false'
+    module 'r/new'
     echo true
     errorStrategy 'ignore'
     
-    module 'r/recommended'
-
     publishDir ".", mode: 'copy'
 
     input:
@@ -400,7 +449,10 @@ process QoRTsR {
 }
 
 process dupradar {
-    module 'r/recommended'
+    
+    errorStrategy 'retry'
+    maxErrors 5
+    module 'r/new'
     tag "${sample_prefix}.dupRadar"
     publishDir "${sample_id}/${replicate}/dupradar", mode: 'copy',
         saveAs: {filename ->
@@ -421,6 +473,6 @@ process dupradar {
     file "*.{pdf,txt}" into dupradar_results
 
     """
-    Rscript  /home/sejjctj/pipelines/rna_seq/dupRadar.R $bam $gtf 0 TRUE 4
+    Rscript  /home/sejjctj/pipelines/rna_seq/dupRadar.R ${bam} ${gtf} 0 TRUE 4
     """
 }
